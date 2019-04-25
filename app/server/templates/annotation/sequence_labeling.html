@@ -3,9 +3,11 @@
 {% load render_bundle from webpack_loader %}
 {% block annotation-area %}
 
-    <div v-for="field in JSON.parse(docs[pageNumber].meta)">
-        <a v-bind:href="field">PDF</a>
+
+    <div class="content" >
+       Link para o original:  <a v-bind:href="JSON.parse(docs[pageNumber].meta).s3url" target="_blank">PDF</a>
     </div>
+
     <div class="card">
     <header class="card-header">
       <div class="card-header-title has-background-royalblue" style="padding:1.5rem;">
