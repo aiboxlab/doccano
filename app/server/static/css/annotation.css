@@ -152,7 +152,7 @@ body {
 
 .content .text-sequence {
   /*white-space: normal;  /*Not render newlines for sequence labelling */
-  white-space:pre-wrap;   /* render newlines for sequence labelling */
+  white-space:pre-line;   /* render newlines for sequence labelling */
   height: auto;
 }
 
