@@ -4,12 +4,13 @@ import itertools
 import json
 import re
 from collections import defaultdict
+from random import Random
 
 from django.db import transaction
+from django.conf import settings
 from rest_framework.renderers import JSONRenderer
 from seqeval.metrics.sequence_labeling import get_entities
 
-from app.settings import IMPORT_BATCH_SIZE
 from .exceptions import FileParseException
 from .models import Label
 from .serializers import DocumentSerializer, LabelSerializer
@@ -53,45 +54,54 @@ class BaseStorage(object):
         annotation = serializer.save(user=user)
         return annotation
 
-    def extract_label(self, data):
-        """Extract labels from parsed data.
-
-        Example:
-            >>> data = [{"labels": ["positive"]}, {"labels": ["negative"]}]
-            >>> self.extract_label(data)
-            [["positive"], ["negative"]]
-        """
+    @classmethod
+    def extract_label(cls, data):
         return [d.get('labels', []) for d in data]
 
-    def exclude_created_labels(self, labels, created):
-        """Exclude created labels.
-
-        Example:
-            >>> labels = ["positive", "negative"]
-            >>> created = {"positive": ...}
-            >>> self.exclude_created_labels(labels, created)
-            ["negative"]
-        """
+    @classmethod
+    def exclude_created_labels(cls, labels, created):
         return [label for label in labels if label not in created]
 
-    def to_serializer_format(self, labels):
-        """Exclude created labels.
+    @classmethod
+    def to_serializer_format(cls, labels, created, random_seed=None):
+        existing_shortkeys = {(label.suffix_key, label.prefix_key)
+                              for label in created.values()}
 
-        Example:
-            >>> labels = ["positive"]
-            >>> self.to_serializer_format(labels)
-            [{"text": "negative"}]
-        ```
-        """
-        return [{'text': label} for label in labels]
+        serializer_labels = []
 
-    def update_saved_labels(self, saved, new):
-        """Update saved labels.
+        for label in sorted(labels):
+            serializer_label = {'text': label}
 
-        Example:
-            >>> saved = {'positive': ...}
-            >>> new = [<Label: positive>]
-        """
+            shortkey = cls.get_shortkey(label, existing_shortkeys)
+            if shortkey:
+                serializer_label['suffix_key'] = shortkey[0]
+                serializer_label['prefix_key'] = shortkey[1]
+                existing_shortkeys.add(shortkey)
+
+            color = Color.random(seed=random_seed)
+            serializer_label['background_color'] = color.hex
+            serializer_label['text_color'] = color.contrast_color.hex
+
+            serializer_labels.append(serializer_label)
+
+        return serializer_labels
+
+    @classmethod
+    def get_shortkey(cls, label, existing_shortkeys):
+        model_prefix_keys = [key for (key, _) in Label.PREFIX_KEYS]
+        prefix_keys = [None] + model_prefix_keys
+
+        model_suffix_keys = {key for (key, _) in Label.SUFFIX_KEYS}
+        suffix_keys = [key for key in label.lower() if key in model_suffix_keys]
+
+        for shortkey in itertools.product(suffix_keys, prefix_keys):
+            if shortkey not in existing_shortkeys:
+                return shortkey
+
+        return None
+
+    @classmethod
+    def update_saved_labels(cls, saved, new):
         for label in new:
             saved[label.text] = label
         return saved
@@ -120,33 +130,18 @@ class ClassificationStorage(BaseStorage):
             labels = self.extract_label(data)
             unique_labels = self.extract_unique_labels(labels)
             unique_labels = self.exclude_created_labels(unique_labels, saved_labels)
-            unique_labels = self.to_serializer_format(unique_labels)
+            unique_labels = self.to_serializer_format(unique_labels, saved_labels)
             new_labels = self.save_label(unique_labels)
             saved_labels = self.update_saved_labels(saved_labels, new_labels)
             annotations = self.make_annotations(docs, labels, saved_labels)
             self.save_annotation(annotations, user)
 
-    def extract_unique_labels(self, labels):
-        """Extract unique labels
-
-        Example:
-            >>> labels = [["positive"], ["positive", "negative"], ["negative"]]
-            >>> self.extract_unique_labels(labels)
-            ["positive", "negative"]
-        """
+    @classmethod
+    def extract_unique_labels(cls, labels):
         return set(itertools.chain(*labels))
 
-    def make_annotations(self, docs, labels, saved_labels):
-        """Make list of annotation obj for serializer.
-
-        Example:
-            >>> docs = ["<Document: a>", "<Document: b>", "<Document: c>"]
-            >>> labels = [["positive"], ["positive", "negative"], ["negative"]]
-            >>> saved_labels = {"positive": "<Label: positive>", 'negative': "<Label: negative>"}
-            >>> self.make_annotations(docs, labels, saved_labels)
-            [{"document": 1, "label": 1}, {"document": 2, "label": 1}
-            {"document": 2, "label": 2}, {"document": 3, "label": 2}]
-        """
+    @classmethod
+    def make_annotations(cls, docs, labels, saved_labels):
         annotations = []
         for doc, label in zip(docs, labels):
             for name in label:
@@ -170,35 +165,18 @@ class SequenceLabelingStorage(BaseStorage):
             labels = self.extract_label(data)
             unique_labels = self.extract_unique_labels(labels)
             unique_labels = self.exclude_created_labels(unique_labels, saved_labels)
-            unique_labels = self.to_serializer_format(unique_labels)
+            unique_labels = self.to_serializer_format(unique_labels, saved_labels)
             new_labels = self.save_label(unique_labels)
             saved_labels = self.update_saved_labels(saved_labels, new_labels)
             annotations = self.make_annotations(docs, labels, saved_labels)
             self.save_annotation(annotations, user)
 
-    def extract_unique_labels(self, labels):
-        """Extract unique labels
-
-        Example:
-            >>> labels = [[[0, 1, "LOC"]], [[3, 4, "ORG"]]]
-            >>> self.extract_unique_labels(labels)
-            ["LOC", "ORG"]
-        """
+    @classmethod
+    def extract_unique_labels(cls, labels):
         return set([label for _, _, label in itertools.chain(*labels)])
 
-    def make_annotations(self, docs, labels, saved_labels):
-        """Make list of annotation obj for serializer.
-
-        Example:
-            >>> docs = ["<Document: a>", "<Document: b>"]
-            >>> labels = labels = [[[0, 1, "LOC"]], [[3, 4, "ORG"]]]
-            >>> saved_labels = {"LOC": "<Label: LOC>", 'ORG': "<Label: ORG>"}
-            >>> self.make_annotations(docs, labels, saved_labels)
-            [
-              {"document": 1, "label": 1, "start_offset": 0, "end_offset": 1}
-              {"document": 2, "label": 2, "start_offset": 3, "end_offset": 4}
-            ]
-        """
+    @classmethod
+    def make_annotations(cls, docs, labels, saved_labels):
         annotations = []
         for doc, spans in zip(docs, labels):
             for span in spans:
@@ -226,16 +204,8 @@ class Seq2seqStorage(BaseStorage):
             annotations = self.make_annotations(doc, labels)
             self.save_annotation(annotations, user)
 
-    def make_annotations(self, docs, labels):
-        """Make list of annotation obj for serializer.
-
-        Example:
-            >>> docs = ["<Document: a>", "<Document: b>"]
-            >>> labels = [["Hello!"], ["How are you?", "What's up?"]]
-            >>> self.make_annotations(docs, labels)
-            [{"document": 1, "text": "Hello"}, {"document": 2, "text": "How are you?"}
-            {"document": 2, "text": "What's up?"}]
-        """
+    @classmethod
+    def make_annotations(cls, docs, labels):
         annotations = []
         for doc, texts in zip(docs, labels):
             for text in texts:
@@ -272,19 +242,13 @@ class CoNLLParser(FileParser):
     ```
     """
     def parse(self, file):
-        """Store json for seq2seq.
-
-        Return format:
-        {"text": "Python is awesome!", "labels": [[0, 6, "Product"],]}
-        ...
-        """
         words, tags = [], []
         data = []
+        file = io.TextIOWrapper(file, encoding='utf-8')
         for i, line in enumerate(file, start=1):
-            if len(data) >= IMPORT_BATCH_SIZE:
+            if len(data) >= settings.IMPORT_BATCH_SIZE:
                 yield data
                 data = []
-            line = line.decode('utf-8')
             line = line.strip()
             if line:
                 try:
@@ -293,29 +257,18 @@ class CoNLLParser(FileParser):
                     raise FileParseException(line_num=i, line=line)
                 words.append(word)
                 tags.append(tag)
-            else:
+            elif words and tags:
                 j = self.calc_char_offset(words, tags)
                 data.append(j)
                 words, tags = [], []
         if len(words) > 0:
             j = self.calc_char_offset(words, tags)
             data.append(j)
+        if data:
             yield data
 
-    def calc_char_offset(self, words, tags):
-        """
-        Examples:
-            >>> words = ['EU', 'rejects', 'German', 'call']
-            >>> tags = ['B-ORG', 'O', 'B-MISC', 'O']
-            >>> entities = get_entities(tags)
-            >>> entities
-            [['ORG', 0, 0], ['MISC', 2, 2]]
-            >>> self.calc_char_offset(words, tags)
-            {
-              'text': 'EU rejects German call',
-              'labels': [[0, 2, 'ORG'], [11, 17, 'MISC']]
-            }
-        """
+    @classmethod
+    def calc_char_offset(cls, words, tags):
         doc = ' '.join(words)
         j = {'text': ' '.join(words), 'labels': []}
         pos = defaultdict(int)
@@ -342,7 +295,7 @@ class PlainTextParser(FileParser):
     def parse(self, file):
         file = io.TextIOWrapper(file, encoding='utf-8')
         while True:
-            batch = list(itertools.islice(file, IMPORT_BATCH_SIZE))
+            batch = list(itertools.islice(file, settings.IMPORT_BATCH_SIZE))
             if not batch:
                 break
             yield [{'text': line.strip()} for line in batch]
@@ -368,7 +321,7 @@ class CSVParser(FileParser):
         columns = next(reader)
         data = []
         for i, row in enumerate(reader, start=2):
-            if len(data) >= IMPORT_BATCH_SIZE:
+            if len(data) >= settings.IMPORT_BATCH_SIZE:
                 yield data
                 data = []
             if len(row) == len(columns) and len(row) >= 2:
@@ -385,13 +338,15 @@ class CSVParser(FileParser):
 class JSONParser(FileParser):
 
     def parse(self, file):
+        file = io.TextIOWrapper(file, encoding='utf-8')
         data = []
         for i, line in enumerate(file, start=1):
-            if len(data) >= IMPORT_BATCH_SIZE:
+            if len(data) >= settings.IMPORT_BATCH_SIZE:
                 yield data
                 data = []
             try:
                 j = json.loads(line)
+                #j  = json.loads(line.decode('utf-8'))
                 j['meta'] = json.dumps(j.get('meta', {}))
                 data.append(j)
             except json.decoder.JSONDecodeError:
@@ -418,7 +373,6 @@ class JSONLRenderer(JSONRenderer):
                              ensure_ascii=self.ensure_ascii,
                              allow_nan=not self.strict) + '\n'
 
-
 class JSONPainter(object):
 
     def paint(self, documents):
@@ -433,6 +387,24 @@ class JSONPainter(object):
             data.append(d)
         return data
 
+    @staticmethod
+    def paint_labels(documents, labels):
+        serializer_labels = LabelSerializer(labels, many=True)
+        serializer = DocumentSerializer(documents, many=True)
+        data = []
+        for d in serializer.data:
+            labels = []
+            for a in d['annotations']:
+                label_obj = [x for x in serializer_labels.data if x['id'] == a['label']][0]
+                label_text = label_obj['text']
+                label_start = a['start_offset']
+                label_end = a['end_offset']
+                labels.append([label_start, label_end, label_text])
+            d.pop('annotations')
+            d['labels'] = labels
+            d['meta'] = json.loads(d['meta'])
+            data.append(d)
+        return data
 
 class CSVPainter(JSONPainter):
 
@@ -444,3 +416,66 @@ class CSVPainter(JSONPainter):
             for a in annotations:
                 res.append({**d, **a})
         return res
+
+
+class Color:
+    def __init__(self, red, green, blue):
+        self.red = red
+        self.green = green
+        self.blue = blue
+
+    @property
+    def contrast_color(self):
+        """Generate black or white color.
+
+        Ensure that text and background color combinations provide
+        sufficient contrast when viewed by someone having color deficits or
+        when viewed on a black and white screen.
+
+        Algorithm from w3c:
+        * https://www.w3.org/TR/AERT/#color-contrast
+        """
+        return Color.white() if self.brightness < 128 else Color.black()
+
+    @property
+    def brightness(self):
+        return ((self.red * 299) + (self.green * 587) + (self.blue * 114)) / 1000
+
+    @property
+    def hex(self):
+        return '#{:02x}{:02x}{:02x}'.format(self.red, self.green, self.blue)
+
+    @classmethod
+    def white(cls):
+        return cls(red=255, green=255, blue=255)
+
+    @classmethod
+    def black(cls):
+        return cls(red=0, green=0, blue=0)
+
+    @classmethod
+    def random(cls, seed=None):
+        rgb = Random(seed).choices(range(256), k=3)
+        return cls(*rgb)
+
+
+def iterable_to_io(iterable, buffer_size=io.DEFAULT_BUFFER_SIZE):
+    """See https://stackoverflow.com/a/20260030/3817588."""
+    class IterStream(io.RawIOBase):
+        def __init__(self):
+            self.leftover = None
+
+        def readable(self):
+            return True
+
+        def readinto(self, b):
+            try:
+                l = len(b)  # We're supposed to return at most this much
+                chunk = self.leftover or next(iterable)
+                output, self.leftover = chunk[:l], chunk[l:]
+                b[:len(output)] = output
+                return len(output)
+            except StopIteration:
+                return 0    # indicate EOF
+
+    return io.BufferedReader(IterStream(), buffer_size=buffer_size)

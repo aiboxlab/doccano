@@ -25,6 +25,7 @@ class Project(PolymorphicModel):
     updated_at = models.DateTimeField(auto_now=True)
     users = models.ManyToManyField(User, related_name='projects')
     project_type = models.CharField(max_length=30, choices=PROJECT_CHOICES)
+    randomize_document_order = models.BooleanField(default=False)
 
     def get_absolute_url(self):
         return reverse('upload', args=[self.id])
@@ -33,13 +34,13 @@ class Project(PolymorphicModel):
     def image(self):
         raise NotImplementedError()
 
-    def get_template_name(self):
+    def get_bundle_name(self):
         raise NotImplementedError()
 
-    def get_upload_template(self):
+    def get_bundle_name_upload(self):
         raise NotImplementedError()
 
-    def get_download_template(self):
+    def get_bundle_name_download(self):
         raise NotImplementedError()
 
     def get_annotation_serializer(self):
@@ -59,16 +60,16 @@ class TextClassificationProject(Project):
 
     @property
     def image(self):
-        return staticfiles_storage.url('images/cats/text_classification.jpg')
+        return staticfiles_storage.url('assets/images/cats/text_classification.jpg')
 
-    def get_template_name(self):
-        return 'annotation/document_classification.html'
+    def get_bundle_name(self):
+        return 'document_classification'
 
-    def get_upload_template(self):
-        return 'admin/upload/text_classification.html'
+    def get_bundle_name_upload(self):
+        return 'upload_text_classification'
 
-    def get_download_template(self):
-        return 'admin/download/text_classification.html'
+    def get_bundle_name_download(self):
+        return 'download_text_classification'
 
     def get_annotation_serializer(self):
         from .serializers import DocumentAnnotationSerializer
@@ -86,16 +87,16 @@ class SequenceLabelingProject(Project):
 
     @property
     def image(self):
-        return staticfiles_storage.url('images/cats/sequence_labeling.jpg')
+        return staticfiles_storage.url('assets/images/cats/sequence_labeling.jpg')
 
-    def get_template_name(self):
-        return 'annotation/sequence_labeling.html'
+    def get_bundle_name(self):
+        return 'sequence_labeling'
 
-    def get_upload_template(self):
-        return 'admin/upload/sequence_labeling.html'
+    def get_bundle_name_upload(self):
+        return 'upload_sequence_labeling'
 
-    def get_download_template(self):
-        return 'admin/download/sequence_labeling.html'
+    def get_bundle_name_download(self):
+        return 'download_sequence_labeling'
 
     def get_annotation_serializer(self):
         from .serializers import SequenceAnnotationSerializer
@@ -113,16 +114,16 @@ class Seq2seqProject(Project):
 
     @property
     def image(self):
-        return staticfiles_storage.url('images/cats/seq2seq.jpg')
+        return staticfiles_storage.url('assets/images/cats/seq2seq.jpg')
 
-    def get_template_name(self):
-        return 'annotation/seq2seq.html'
+    def get_bundle_name(self):
+        return 'seq2seq'
 
-    def get_upload_template(self):
-        return 'admin/upload/seq2seq.html'
+    def get_bundle_name_upload(self):
+        return 'upload_seq2seq'
 
-    def get_download_template(self):
-        return 'admin/download/seq2seq.html'
+    def get_bundle_name_download(self):
+        return 'download_seq2seq'
 
     def get_annotation_serializer(self):
         from .serializers import Seq2seqAnnotationSerializer
@@ -142,7 +143,7 @@ class Label(models.Model):
         ('shift', 'shift'),
         ('ctrl shift', 'ctrl shift')
     )
-    SUFFIX_KEYS = (
+    SUFFIX_KEYS = tuple(
         (c, c) for c in string.ascii_lowercase
     )
 

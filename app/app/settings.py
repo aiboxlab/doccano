@@ -15,13 +15,14 @@ from os import path
 import django_heroku
 import dj_database_url
 from environs import Env
+from furl import furl
 
 
 # Build paths inside the project like this: path.join(BASE_DIR, ...)
 BASE_DIR = path.dirname(path.dirname(path.abspath(__file__)))
 
 env = Env()
-env.read_env(BASE_DIR, recurse=False)
+env.read_env(path.join(BASE_DIR, '.env'), recurse=False)
 
 
 # Quick-start development settings - unsuitable for production
@@ -55,6 +56,15 @@ INSTALLED_APPS = [
     'polymorphic',
     'webpack_loader',
 ]
+
+CLOUD_BROWSER_APACHE_LIBCLOUD_PROVIDER = env('CLOUD_BROWSER_LIBCLOUD_PROVIDER', None)
+CLOUD_BROWSER_APACHE_LIBCLOUD_ACCOUNT = env('CLOUD_BROWSER_LIBCLOUD_ACCOUNT', None)
+CLOUD_BROWSER_APACHE_LIBCLOUD_SECRET_KEY = env('CLOUD_BROWSER_LIBCLOUD_KEY', None)
+
+if CLOUD_BROWSER_APACHE_LIBCLOUD_PROVIDER:
+    CLOUD_BROWSER_DATASTORE = 'ApacheLibcloud'
+    CLOUD_BROWSER_OBJECT_REDIRECT_URL = '/v1/cloud-upload'
+    INSTALLED_APPS.append('cloud_browser')
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -92,8 +102,19 @@ TEMPLATES = [
     },
 ]
 
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/2.0/howto/static-files/
+
+STATIC_URL = '/static/'
+STATIC_ROOT = path.join(BASE_DIR, 'staticfiles')
+
 STATICFILES_DIRS = [
-    path.join(BASE_DIR, 'server/static'),
+    static_path
+    for static_path in (
+        path.join(BASE_DIR, 'server', 'static', 'assets'),
+        path.join(BASE_DIR, 'server', 'static', 'static'),
+    )
+    if path.isdir(static_path)
 ]
 
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
@@ -102,7 +123,7 @@ WEBPACK_LOADER = {
     'DEFAULT': {
         'CACHE': not DEBUG,
         'BUNDLE_DIR_NAME': 'bundle/',
-        'STATS_FILE': path.join(BASE_DIR, 'server', 'webpack-stats.json'),
+        'STATS_FILE': path.join(BASE_DIR, 'server', 'static', 'webpack-stats.json'),
         'POLL_INTERVAL': 0.1,
         'TIMEOUT': None,
         'IGNORE': [r'.*\.hot-update.js', r'.+\.map']
@@ -119,10 +140,34 @@ AUTHENTICATION_BACKENDS = [
 
 SOCIAL_AUTH_GITHUB_KEY = env('OAUTH_GITHUB_KEY', None)
 SOCIAL_AUTH_GITHUB_SECRET = env('OAUTH_GITHUB_SECRET', None)
+GITHUB_ADMIN_ORG_NAME = env('GITHUB_ADMIN_ORG_NAME', None)
+GITHUB_ADMIN_TEAM_NAME = env('GITHUB_ADMIN_TEAM_NAME', None)
+
+if GITHUB_ADMIN_ORG_NAME and GITHUB_ADMIN_TEAM_NAME:
+    SOCIAL_AUTH_GITHUB_SCOPE = ['read:org']
 
 SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_KEY = env('OAUTH_AAD_KEY', None)
 SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_SECRET = env('OAUTH_AAD_SECRET', None)
 SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_TENANT_ID = env('OAUTH_AAD_TENANT', None)
+AZUREAD_ADMIN_GROUP_ID = env('AZUREAD_ADMIN_GROUP_ID', None)
+
+if AZUREAD_ADMIN_GROUP_ID:
+    SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_RESOURCE = 'https://graph.microsoft.com/'
+    SOCIAL_AUTH_AZUREAD_TENANT_OAUTH2_SCOPE = ['Directory.Read.All']
+
+SOCIAL_AUTH_PIPELINE = [
+    'social_core.pipeline.social_auth.social_details',
+    'social_core.pipeline.social_auth.social_uid',
+    'social_core.pipeline.social_auth.auth_allowed',
+    'social_core.pipeline.social_auth.social_user',
+    'social_core.pipeline.user.get_username',
+    'social_core.pipeline.user.create_user',
+    'social_core.pipeline.social_auth.associate_user',
+    'social_core.pipeline.social_auth.load_extra_data',
+    'social_core.pipeline.user.user_details',
+    'server.social_auth.fetch_github_permissions',
+    'server.social_auth.fetch_azuread_permissions',
+]
 
 # Database
 # https://docs.djangoproject.com/en/2.0/ref/settings/#databases
@@ -184,18 +229,25 @@ USE_L10N = True
 
 USE_TZ = True
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/2.0/howto/static-files/
-
-STATIC_URL = '/static/'
+TEST_RUNNER = 'xmlrunner.extra.djangotestrunner.XMLTestRunner'
+TEST_OUTPUT_DIR = path.join(BASE_DIR, 'junitxml')
 
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/projects/'
 LOGOUT_REDIRECT_URL = '/'
 
+django_heroku.settings(locals(), test_runner=False)
+
 # Change 'default' database configuration with $DATABASE_URL.
-DATABASES['default'].update(dj_database_url.config(conn_max_age=500, ssl_require=True))
+DATABASES['default'].update(dj_database_url.config(
+    env='DATABASE_URL',
+    conn_max_age=env.int('DATABASE_CONN_MAX_AGE', 500),
+    ssl_require='sslmode' not in furl(env('DATABASE_URL', '')).args,
+))
+
+# work-around for dj-database-url: explicitly disable ssl for sqlite
+if DATABASES['default'].get('ENGINE') == 'django.db.backends.sqlite3':
+    DATABASES['default'].get('OPTIONS', {}).pop('sslmode', None)
 
 # Honor the 'X-Forwarded-Proto' header for request.is_secure()
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -205,7 +257,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Size of the batch for creating documents
 # on the import phase
-IMPORT_BATCH_SIZE = 500
+IMPORT_BATCH_SIZE = env.int('IMPORT_BATCH_SIZE', 500)
 
 GOOGLE_TRACKING_ID = env('GOOGLE_TRACKING_ID', 'UA-125643874-2')
 
@@ -213,5 +265,3 @@ AZURE_APPINSIGHTS_IKEY = env('AZURE_APPINSIGHTS_IKEY', None)
 APPLICATION_INSIGHTS = {
     'ikey': AZURE_APPINSIGHTS_IKEY if AZURE_APPINSIGHTS_IKEY else None,
 }
-
-django_heroku.settings(locals(), test_runner=False)

@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
 from model_mommy import mommy
@@ -9,6 +9,7 @@ from ..serializers import SequenceAnnotationSerializer
 from ..serializers import Seq2seqAnnotationSerializer
 
 
+@override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class TestTextClassificationProject(TestCase):
 
     @classmethod
@@ -19,9 +20,9 @@ class TestTextClassificationProject(TestCase):
         image_url = self.project.image
         self.assertTrue(image_url.endswith('.jpg'))
 
-    def test_get_template_name(self):
-        template = self.project.get_template_name()
-        self.assertEqual(template, 'annotation/document_classification.html')
+    def test_get_bundle_name(self):
+        template = self.project.get_bundle_name()
+        self.assertEqual(template, 'document_classification')
 
     def test_get_annotation_serializer(self):
         serializer = self.project.get_annotation_serializer()
@@ -32,6 +33,7 @@ class TestTextClassificationProject(TestCase):
         self.assertEqual(klass, DocumentAnnotation)
 
 
+@override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class TestSequenceLabelingProject(TestCase):
 
     @classmethod
@@ -42,9 +44,9 @@ class TestSequenceLabelingProject(TestCase):
         image_url = self.project.image
         self.assertTrue(image_url.endswith('.jpg'))
 
-    def test_get_template_name(self):
-        template = self.project.get_template_name()
-        self.assertEqual(template, 'annotation/sequence_labeling.html')
+    def test_get_bundle_name(self):
+        template = self.project.get_bundle_name()
+        self.assertEqual(template, 'sequence_labeling')
 
     def test_get_annotation_serializer(self):
         serializer = self.project.get_annotation_serializer()
@@ -55,6 +57,7 @@ class TestSequenceLabelingProject(TestCase):
         self.assertEqual(klass, SequenceAnnotation)
 
 
+@override_settings(STATICFILES_STORAGE='django.contrib.staticfiles.storage.StaticFilesStorage')
 class TestSeq2seqProject(TestCase):
 
     @classmethod
@@ -65,9 +68,9 @@ class TestSeq2seqProject(TestCase):
         image_url = self.project.image
         self.assertTrue(image_url.endswith('.jpg'))
 
-    def test_get_template_name(self):
-        template = self.project.get_template_name()
-        self.assertEqual(template, 'annotation/seq2seq.html')
+    def test_get_bundle_name(self):
+        template = self.project.get_bundle_name()
+        self.assertEqual(template, 'seq2seq')
 
     def test_get_annotation_serializer(self):
         serializer = self.project.get_annotation_serializer()

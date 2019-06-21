@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load static %}
+{% load render_bundle from webpack_loader %}
 
 {% block header %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Swiper/4.3.3/css/swiper.min.css">
@@ -20,7 +21,7 @@
       </div>
       <div class="column is-6">
         <figure class="image">
-          <img src="{% static 'images/named_entity_recognition.png' %}">
+          <img src="{% static 'assets/images/named_entity_recognition.png' %}">
         </figure>
       </div>
     </div>
@@ -35,7 +36,7 @@
         <div class="columns is-vcentered">
           <div class="column is-5 is-offset-1">
             <figure class="image">
-              <img src="{% static 'images/sentiment_analysis.png' %}" alt="Description">
+              <img src="{% static 'assets/images/sentiment_analysis.png' %}" alt="Description">
             </figure>
           </div>
           <div class="column is-5">
@@ -58,7 +59,7 @@
         <div class="columns is-vcentered">
           <div class="column is-5 is-offset-1">
             <figure class="image">
-              <img src="{% static 'images/named_entity_recognition.png' %}" alt="Description">
+              <img src="{% static 'assets/images/named_entity_recognition.png' %}" alt="Description">
             </figure>
           </div>
           <div class="column is-5">
@@ -81,7 +82,7 @@
         <div class="columns is-vcentered">
           <div class="column is-5 is-offset-1">
             <figure class="image">
-              <img src="{% static 'images/translation.png' %}" alt="Description">
+              <img src="{% static 'assets/images/translation.png' %}" alt="Description">
             </figure>
           </div>
           <div class="column is-5">
@@ -215,19 +216,5 @@
 {% endblock %}
 
 {% block footer %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Swiper/4.3.3/js/swiper.min.js"></script>
-<script>
-  new Swiper('.swiper-container', {
-    // Optional parameters
-    loop: true,
-    autoplay: {
-      delay: 5000,
-    },
-    // Navigation arrows
-    navigation: {
-      nextEl: '.swiper-button-next',
-      prevEl: '.swiper-button-prev',
-    },
-  })
-</script>
+{% render_bundle 'index' 'js' %}
 {% endblock %}

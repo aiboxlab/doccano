@@ -74,6 +74,7 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+junitxml/
 
 # Translations
 *.mo
@@ -82,6 +83,8 @@ coverage.xml
 # Django stuff:
 *.log
 local_settings.py
+*.sqlite3
+staticfiles/
 
 # Flask stuff:
 instance/
@@ -191,14 +194,7 @@ fabric.properties
 pyvenv.cfg
 pip-selfcheck.json
 
-/data/raw/*
-/data/sparql/*
-
-# ignore db to avoid merge conflicts
-*.sqlite3
-
-# ignore django/node generated static files
+# ignore webpack state
 node_modules/
-app/staticfiles/
-app/server/static/bundle/
-app/server/webpack-stats.json
+bundle/
+webpack-stats.json
