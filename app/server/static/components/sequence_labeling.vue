@@ -2,6 +2,14 @@
 extends ./annotation.pug
 
 block annotation-area
+  div
+    span.tag.is-medium
+      kbd Link para o original:
+
+    a.tag.is-medium(
+        v-bind:href="JSON.parse(docs[pageNumber].meta).s3url"
+    ) PDF
+
   div.card
     header.card-header
       div.card-header-title.has-background-royalblue
