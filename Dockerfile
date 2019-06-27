@@ -1,6 +1,8 @@
 ARG PYTHON_VERSION="3.6"
 FROM python:${PYTHON_VERSION} AS builder
 
+RUN echo "teste 2"
+
 ARG NODE_VERSION="8.x"
 RUN curl -sL "https://deb.nodesource.com/setup_${NODE_VERSION}" | bash - \
  && apt-get install nodejs
@@ -15,13 +17,13 @@ RUN pip install -r /requirements.txt \
 
 COPY . /doccano
 
-RUN cd /doccano \
- && tools/ci.sh
+#RUN cd /doccano \
+# && tools/ci.sh
 
 FROM builder AS cleaner
 
 RUN cd /doccano/app/server/static \
- && SOURCE_MAP=False DEBUG=False npm run build \
+ && SOURCE_MAP=True DEBUG=True npm run build \
  && rm -rf components pages node_modules .*rc package*.json webpack.config.js
 
 RUN cd /doccano \

@@ -6,7 +6,7 @@ services:
        context: .
        dockerfile: Dockerfile
     ports:
-      - '50010:80'
+      - '50011:80'
     volumes:
       - doccano:/doccano
 
