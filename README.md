@@ -10,3 +10,8 @@ $ git checkout master
 $ git merge upstream/master
 $ git push
 ```
+
+## To setup superuser
+```
+docker exec doccano tools/create-admin.sh "admin" "admin@example.com" "admin123"
+```
